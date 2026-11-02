@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "driver/gpio.h"
 #include <driver/i2c_master.h>
+#include "driver/ledc.h"
 #include <esp_log.h>
 #include "esp_attr.h"
 #include "esp_err.h"
@@ -10,6 +11,7 @@
 #include "hal/gpio_types.h"
 #include "portmacro.h"
 #include "soc/gpio_num.h"
+
 
 #include <u8g2.h>
 #include <u8g2_esp32_hal.h>
@@ -25,8 +27,56 @@
 
 #define PRIOR_ON_OFF_OLED 4
 
+#define BUZZER_GPIO GPIO_NUM_25
+
 static TaskHandle_t oled_on_off_handle = NULL;
 static u8g2_t data;
+
+static void buzzer_init(void){
+    ledc_timer_config_t ledc_timer = {
+        .speed_mode      = LEDC_LOW_SPEED_MODE,
+        .duty_resolution = LEDC_TIMER_10_BIT,
+        .timer_num       = LEDC_TIMER_0,
+        .freq_hz         = 2700,
+        .clk_cfg         = LEDC_AUTO_CLK,
+    };
+
+    ledc_timer_config(&ledc_timer);
+
+    ledc_channel_config_t ledc_channel = {
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .channel    = LEDC_CHANNEL_0,
+        .timer_sel  = LEDC_TIMER_0,
+        .gpio_num   = BUZZER_GPIO,
+        .duty       = 0,
+        .hpoint     = 0,
+    };
+
+    ledc_channel_config(&ledc_channel);
+
+}
+void buzzer_tone(uint32_t freq) {
+    if (freq) {
+        ledc_set_freq(LEDC_LOW_SPEED_MODE, LEDC_TIMER_0, freq);
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 512);
+    } else {
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 0);
+    }
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+}
+
+static void play_sound(void) {
+    const uint32_t notes[][2] = {
+    {2093, 90}, {0, 20},   // ti  (C7)
+    {2637, 90}, {0, 20},   // ru  (E7)
+    {3136, 160},           // ri  (G7)
+};
+    for (int i = 0; i < sizeof(notes) / sizeof(notes[0]); i++) {
+        buzzer_tone(notes[i][0]);
+        vTaskDelay(pdMS_TO_TICKS(notes[i][1]));
+    }
+    buzzer_tone(0);
+}
 
 static void IRAM_ATTR oled_onoff_but_isr_handler(void *arg){
     gpio_intr_disable(OLED_ON_OFF_GPIO);
@@ -47,6 +97,7 @@ static void oled_on_off_task(void *args){
 
         if (gpio_get_level(OLED_ON_OFF_GPIO) == 0){
             on = !on;
+            play_sound();
             u8g2_SetPowerSave(&data, on ? 0 : 1);
             while (gpio_get_level(OLED_ON_OFF_GPIO) == 0)
                 vTaskDelay(pdMS_TO_TICKS(10));
@@ -71,6 +122,7 @@ static void button_init(void){
 
 void app_main(void)
 {
+    buzzer_init();
     u8g2_esp32_hal_t oled_hal = U8G2_ESP32_HAL_DEFAULT;
     oled_hal.bus.spi.clk   = OLED_CLK;
     oled_hal.bus.spi.mosi  = OLED_MOSI;
