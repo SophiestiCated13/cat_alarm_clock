@@ -11,6 +11,7 @@
 #include "hal/gpio_types.h"
 #include "portmacro.h"
 #include "soc/gpio_num.h"
+#include "cat20.h"
 
 
 #include <u8g2.h>
@@ -138,9 +139,8 @@ void app_main(void)
     u8g2_SetPowerSave(&data, 0);
 
     u8g2_ClearBuffer(&data);
-    u8g2_SetFont(&data, u8g2_font_ncenB14_tr);
-    u8g2_DrawStr(&data, 0, 20, "I love cats");
-    u8g2_SendBuffer(&data);
+    u8g2_DrawXBM(&data, 96, 0, cat20_width, cat20_height, cat20_bits); // wyśrodkowany: (256-64)/2
+    u8g2_SendBuffer(&data); 
     
     u8g2_SetPowerSave(&data, 1);
 
